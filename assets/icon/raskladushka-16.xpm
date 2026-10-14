@@ -1,0 +1,23 @@
+/* XPM */
+static char *raskladushka_16[] = {
+"16 16 3 1",
+"  c None",
+"g c #1F9D55",
+"w c #FFFFFF",
+" gggggggggggggg ",
+"gggggggggggggggg",
+"gggggggggggggggg",
+"ggwwwwgggggggggg",
+"ggwwwwgggggggggg",
+"gwwwwwwwwwwwwwwg",
+"gwwwwwwwwwwwwwwg",
+"gwggggwggwggggwg",
+"ggwggwggggwggwgg",
+"gggwwggggggwwggg",
+"gggwwggggggwwggg",
+"ggwggwggggwggwgg",
+"gwggggwggwggggwg",
+"gggggggggggggggg",
+"gggggggggggggggg",
+" gggggggggggggg "
+};

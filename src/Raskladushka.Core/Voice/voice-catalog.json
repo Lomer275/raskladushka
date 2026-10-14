@@ -1,0 +1,50 @@
+{
+  "whisperRelease": "b5454",
+  "packages": [
+    {
+      "id": "build-cpu",
+      "kind": "build",
+      "target": "cpu",
+      "file": "whisper-bin-x64.zip",
+      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip",
+      "size": 8928640,
+      "unpackedSize": 23147520,
+      "sha256": "6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb"
+    },
+    {
+      "id": "build-cuda",
+      "kind": "build",
+      "target": "cuda",
+      "file": "whisper-bin-win-cuda-12.4.0-x64.zip",
+      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-win-cuda-12.4.0-x64.zip",
+      "size": 684913404,
+      "unpackedSize": 1217620480,
+      "sha256": "afef0b881c500958921c3f5523b50e59ee2ec9b6f5cbd25b324c51ed308a957a"
+    },
+    {
+      "id": "model-gpu",
+      "kind": "model",
+      "target": "ggml-large-v3-turbo-q5_0.bin",
+      "file": "ggml-large-v3-turbo-q5_0.bin",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",
+      "size": 574041195,
+      "unpackedSize": 0,
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
+    },
+    {
+      "id": "model-cpu",
+      "kind": "model",
+      "target": "ggml-small.bin",
+      "file": "ggml-small.bin",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin",
+      "size": 487601967,
+      "unpackedSize": 0,
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+    }
+  ],
+  "variants": {
+    "gpu": ["build-cuda", "build-cpu", "model-gpu"],
+    "cpu": ["build-cpu", "model-cpu"],
+    "cpuModel": ["model-cpu"]
+  }
+}

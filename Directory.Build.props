@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The package audit needs the network; offline (in the implementer's sandbox) its failure must not break the build. -->
+    <WarningsNotAsErrors>NU1900</WarningsNotAsErrors>
+    <!-- Lets the Windows-only shell project compile on the Linux build machine. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Version>0.2.0</Version>
+  </PropertyGroup>
+</Project>

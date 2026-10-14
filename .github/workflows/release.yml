@@ -1,0 +1,351 @@
+# Release build of Raskladushka on a clean GitHub Windows machine: core tests, self-contained
+# publish, installer, DLL import check, silent install/update/uninstall checks and a voice check.
+# A pushed tag v* ends in a DRAFT release; publishing it is the owner's button.
+# A manual run only builds and checks; tick "blas" to also time the OpenBLAS build of whisper.cpp.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      blas:
+        description: 'Замер BLAS: ещё раз проверить голос на сборке whisper.cpp с OpenBLAS'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  INNO_URL: https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe
+  INNO_SHA256: 9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732
+  # Measurement only: this build is not in the voice catalog and never reaches users.
+  BLAS_URL: https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-blas-bin-x64.zip
+  BLAS_SHA256: b1158bd10edf92c9799149a6fc5d3e58da3f495241d6fb3423088130e88ffbf3
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      # Test data and the installer script must reach the build byte for byte as committed.
+      - name: Без подмены переводов строк
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Версия
+        id: version
+        run: |
+          $props = (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText.Trim()
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if (-not ($env:GITHUB_REF_NAME -match '^v(\d+\.\d+\.\d+)(-rc\.\d+)?$')) {
+              throw "Метка $env:GITHUB_REF_NAME не похожа на vX.Y.Z или vX.Y.Z-rc.N."
+            }
+            if ($Matches[1] -ne $props) {
+              throw "Метка $env:GITHUB_REF_NAME не совпадает с версией $props в Directory.Build.props."
+            }
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+            $prerelease = [bool]$Matches[2]
+          } else {
+            $version = "$props-ci.$env:GITHUB_RUN_NUMBER"
+            $prerelease = $true
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($prerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "### Раскладушка $version" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Тесты ядра
+        run: dotnet run --project tests/Raskladushka.Core.Tests -c Release
+
+      - name: Сборка вместе с .NET
+        run: dotnet publish src/Raskladushka.App -c Release -r win-x64 --self-contained true -o out/app "-p:Version=$env:VERSION"
+
+      - name: Библиотеки Visual C++
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -latest -products * -property installationPath
+          $redist = Get-ChildItem (Join-Path $vs 'VC\Redist\MSVC') -Directory |
+            Where-Object Name -match '^\d+(\.\d+)+$' |
+            Sort-Object { [version]$_.Name } |
+            Select-Object -Last 1
+          if (-not $redist) { throw "Нет VC\Redist\MSVC в $vs." }
+          New-Item -ItemType Directory out/vcrt -Force | Out-Null
+          foreach ($file in 'Microsoft.VC143.CRT\msvcp140.dll', 'Microsoft.VC143.CRT\vcruntime140.dll',
+                            'Microsoft.VC143.CRT\vcruntime140_1.dll', 'Microsoft.VC143.OpenMP\vcomp140.dll') {
+            Copy-Item -LiteralPath (Join-Path $redist.FullName "x64\$file") -Destination out/vcrt -ErrorAction Stop
+          }
+          "Visual C++: $($redist.Name)" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Установщик
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          curl.exe -fsSL --retry 3 -o $setup $env:INNO_URL
+          if ((Get-FileHash $setup -Algorithm SHA256).Hash -ne $env:INNO_SHA256) { throw 'Сумма установщика Inno Setup не совпала.' }
+          # The image has its own Inno Setup of another version; the pinned one goes to a private folder.
+          $inno = Join-Path $env:RUNNER_TEMP 'inno'
+          $p = Start-Process $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /PORTABLE=1 /DIR=`"$inno`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Inno Setup не установился: код $($p.ExitCode)." }
+          & (Join-Path $inno 'ISCC.exe') "/DAppVersion=$env:VERSION" "/DPublishDir=$((Resolve-Path out/app).Path)" `
+            "/DRuntimeDir=$((Resolve-Path out/vcrt).Path)" installer\Raskladushka.iss
+          "INSTALLER=$((Resolve-Path "artifacts/installer/Raskladushka-$env:VERSION-setup.exe").Path)" >> $env:GITHUB_ENV
+
+      - name: Проверка импорта — программа
+        run: python -I build/check_imports.py out/app
+
+      - name: Проверка импорта — сборка голоса для CUDA
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $catalog = Get-Content src/Raskladushka.Core/Voice/voice-catalog.json -Raw | ConvertFrom-Json
+          $cuda = $catalog.packages | Where-Object id -eq 'build-cuda'
+          $zip = Join-Path $env:RUNNER_TEMP $cuda.file
+          curl.exe -fsSL --retry 3 -o $zip $cuda.url
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $cuda.sha256) { throw 'Сумма сборки CUDA не совпала с каталогом.' }
+          $unpacked = Join-Path $env:RUNNER_TEMP 'cuda-unpacked'
+          $dir = Join-Path $env:RUNNER_TEMP 'cuda'
+          New-Item -ItemType Directory $unpacked, $dir | Out-Null
+          & (Join-Path $env:SystemRoot 'System32\tar.exe') -xf $zip -C $unpacked
+          # Same layout as the program makes: archive flattened into one folder plus the Visual C++ files.
+          Get-ChildItem $unpacked -Recurse -File | Move-Item -Destination $dir
+          Copy-Item out/vcrt/* $dir
+          python -I build/check_imports.py $dir --allow nvcuda.dll
+          Remove-Item $zip, $unpacked, $dir -Recurse -Force
+
+      - name: Установка, обновление поверх запущенной, удаление
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $app = Join-Path $env:LOCALAPPDATA 'Programs\Raskladushka'
+          $exe = Join-Path $app 'Raskladushka.exe'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Раскладушка.lnk'
+          $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Раскладушка.lnk'
+          $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $log = Join-Path $env:LOCALAPPDATA 'Raskladushka\logs\raskladushka.log'
+          $started = 'Application started; version=' + [regex]::Escape($env:VERSION) + '[+.]'
+          $exitRequested = 'Exit requested\.'
+          $reports = Join-Path $env:RUNNER_TEMP 'reports'
+          New-Item -ItemType Directory $reports -Force | Out-Null
+
+          function Invoke-Setup([string]$file, [string]$name) {
+            $p = Start-Process $file -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$reports\$name.log`"" -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "«$name» завершился с кодом $($p.ExitCode)." }
+          }
+          function Get-Run { (Get-ItemProperty $runKey -Name Raskladushka -ErrorAction SilentlyContinue).Raskladushka }
+          function Get-LogCount([string]$pattern) {
+            if (-not (Test-Path -LiteralPath $log)) { return 0 }
+            # The program keeps the log open; share it the same way to read alongside.
+            $stream = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite, Delete')
+            try { $text = [IO.StreamReader]::new($stream).ReadToEnd() } finally { $stream.Dispose() }
+            [regex]::Matches($text, $pattern).Count
+          }
+          function Wait-Until([scriptblock]$condition, [string]$what, [int]$seconds = 60) {
+            $deadline = (Get-Date).AddSeconds($seconds)
+            while (-not (& $condition)) {
+              if ((Get-Date) -gt $deadline) { throw "Не дождались: $what." }
+              Start-Sleep -Milliseconds 500
+            }
+          }
+          function Start-App {
+            $before = Get-LogCount $started
+            $process = Start-Process $exe -PassThru
+            Wait-Until { (Get-LogCount $started) -gt $before } "строки «Application started; version=$env:VERSION» в журнале"
+            $process
+          }
+          function Assert-Run([string]$expected, [string]$when) {
+            $actual = [string](Get-Run)
+            if ($actual -ne $expected) { throw "$when автозапуск «$actual», ожидалось «$expected»." }
+          }
+
+          if (Test-Path -LiteralPath $app) { throw 'Папка программы есть ещё до установки.' }
+          Invoke-Setup $env:INSTALLER 'setup-1'
+          foreach ($path in $exe, (Join-Path $app 'vcrt\vcomp140.dll'), (Join-Path $app 'THIRD-PARTY-NOTICES.txt'),
+                            (Join-Path $app 'selftest.wav'), (Join-Path $app 'unins000.exe'), $shortcut) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "После установки нет $path." }
+          }
+          if (Test-Path -LiteralPath $desktop) { throw 'Значок на рабочем столе появился без спроса.' }
+          Assert-Run "`"$exe`"" 'После установки'
+
+          $running = Start-App
+          $exits = Get-LogCount $exitRequested
+          Invoke-Setup $env:INSTALLER 'setup-2-over-running'
+          Wait-Until { $running.HasExited } 'закрытия запущенной программы' 15
+          if ((Get-LogCount $exitRequested) -le $exits) { throw 'В журнале нет «Exit requested.»: программа закрылась не по команде установщика.' }
+          Assert-Run "`"$exe`"" 'После обновления'
+
+          Remove-ItemProperty $runKey -Name Raskladushka
+          Invoke-Setup $env:INSTALLER 'setup-3-autostart-off'
+          Assert-Run '' 'После обновления с выключенным'
+
+          # Autostart back on as if from the tray menu: uninstall must remove it, and close the running program.
+          Set-ItemProperty $runKey -Name Raskladushka -Value "`"$exe`""
+          $running = Start-App
+          Invoke-Setup (Join-Path $app 'unins000.exe') 'uninstall'
+          Wait-Until { -not (Test-Path -LiteralPath $exe) } 'удаления программы'
+          if (-not $running.HasExited) { throw 'Программа осталась запущенной после удаления.' }
+          if (Test-Path -LiteralPath $shortcut) { throw 'После удаления остался ярлык.' }
+          Assert-Run '' 'После удаления'
+          if (-not (Test-Path -LiteralPath (Join-Path $env:APPDATA 'Raskladushka'))) { throw 'Удаление без окон стёрло настройки.' }
+          'Установка, обновление поверх запущенной и удаление: пройдены.' >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Голос — проверка и замер
+        env:
+          BLAS: ${{ inputs.blas }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $exe = (Resolve-Path out/app/Raskladushka.exe).Path
+          $runtime = (Resolve-Path out/vcrt).Path
+          $reports = Join-Path $env:RUNNER_TEMP 'reports'
+          New-Item -ItemType Directory $reports -Force | Out-Null
+
+          function Invoke-VoiceCheck([string]$dir, [string]$name) {
+            $out = Join-Path $reports "$name.json"
+            # A windowed program: PowerShell does not wait for it on its own.
+            $p = Start-Process $exe -ArgumentList "--voice-check --variant cpu --dir `"$dir`" --runtime `"$runtime`" --out `"$out`"" -Wait -PassThru
+            $report = $null
+            if (Test-Path -LiteralPath $out) {
+              $json = Get-Content -LiteralPath $out -Raw -Encoding utf8
+              Write-Host $json
+              $report = $json | ConvertFrom-Json
+            }
+            if ($p.ExitCode -ne 0 -or -not $report -or -not $report.ok) {
+              throw "Проверка голоса «$name»: код $($p.ExitCode), ошибка: $($report.error)"
+            }
+            $report
+          }
+          function Add-Row([string]$name, $r) {
+            $second = if ($null -ne $r.secondSeconds) { '{0:0.0}' -f $r.secondSeconds } else { '—' }
+            $start = '{0:0.0}' -f $r.startSeconds
+            $first = '{0:0.0}' -f $r.firstSeconds
+            "| $name | $start | $first | $second | $($r.threads) | $($r.alreadyInstalled) |" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+          $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+          @(
+            '',
+            '### Голос на сборочной машине GitHub',
+            "Процессор: $($cpu.Name.Trim()); ядер $($cpu.NumberOfCores), потоков $($cpu.NumberOfLogicalProcessors).",
+            '',
+            '| Проверка | Запуск whisper, с | Первое распознавание, с | Второе, с | Потоков | Уже стоял |',
+            '|---|---|---|---|---|---|'
+          ) -join "`n" >> $env:GITHUB_STEP_SUMMARY
+
+          $voice = Join-Path $env:RUNNER_TEMP 'voice'
+          $plain = Invoke-VoiceCheck $voice 'cpu'
+          if ($plain.alreadyInstalled) { throw 'Голос оказался на месте ещё до первой проверки.' }
+          Add-Row 'Процессор' $plain
+          python -I build/check_imports.py (Join-Path $voice 'cpu')
+
+          $cyrillic = Join-Path $env:RUNNER_TEMP 'Иван Петров\голос'
+          New-Item -ItemType Directory (Split-Path $cyrillic) | Out-Null
+          Copy-Item -LiteralPath $voice -Destination $cyrillic -Recurse
+          $moved = Invoke-VoiceCheck $cyrillic 'cpu-cyrillic'
+          if (-not $moved.alreadyInstalled) { throw 'В папке с русскими буквами и пробелом голос скачался заново.' }
+          Add-Row 'Процессор, папка «Иван Петров\голос»' $moved
+
+          if ($env:BLAS -eq 'true') {
+            $zip = Join-Path $env:RUNNER_TEMP 'whisper-blas-bin-x64.zip'
+            curl.exe -fsSL --retry 3 -o $zip $env:BLAS_URL
+            if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $env:BLAS_SHA256) { throw 'Сумма сборки BLAS не совпала.' }
+            $blas = Join-Path $env:RUNNER_TEMP 'voice-blas'
+            Copy-Item -LiteralPath $voice -Destination $blas -Recurse
+            $build = Join-Path $blas 'cpu'
+            # Keep the package marker: the program then treats the swapped build as installed and times it.
+            Get-ChildItem -LiteralPath $build -Force | Where-Object Name -ne '.package' | Remove-Item -Recurse -Force
+            $unpacked = Join-Path $env:RUNNER_TEMP 'blas-unpacked'
+            New-Item -ItemType Directory $unpacked | Out-Null
+            & (Join-Path $env:SystemRoot 'System32\tar.exe') -xf $zip -C $unpacked
+            Get-ChildItem $unpacked -Recurse -File | Move-Item -Destination $build
+            Copy-Item (Join-Path $runtime '*') $build
+            python -I build/check_imports.py $build
+            $measured = Invoke-VoiceCheck $blas 'cpu-blas'
+            if (-not $measured.alreadyInstalled) { throw 'Программа заменила сборку BLAS своей: замер недействителен.' }
+            Add-Row 'Процессор + OpenBLAS' $measured
+          }
+
+          @('', "Распознано из selftest.wav: «$($plain.text)»") -join "`n" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Суммы
+        run: |
+          $file = Get-Item -LiteralPath $env:INSTALLER
+          $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path $file.DirectoryName 'SHA256SUMS.txt'), "$hash  $($file.Name)`n",
+            [Text.UTF8Encoding]::new($false))
+          "SHA-256 установщика: ``$hash``" >> $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: installer
+          path: artifacts/installer/
+          if-no-files-found: error
+
+      # One folder on one drive: the artifact root is the common parent of all paths.
+      - name: Собрать журналы
+        if: always()
+        run: |
+          $reports = Join-Path $env:RUNNER_TEMP 'reports'
+          $logs = Join-Path $env:LOCALAPPDATA 'Raskladushka\logs'
+          New-Item -ItemType Directory $reports -Force | Out-Null
+          if (Test-Path -LiteralPath $logs) { Copy-Item -LiteralPath $logs -Destination (Join-Path $reports 'app-logs') -Recurse }
+
+      # No personal data here: the machine is fresh and nobody types on it.
+      - name: Журналы и отчёты
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports
+          path: ${{ runner.temp }}/reports/
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: installer
+          path: dist
+
+      - name: Черновик выпуска
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          sha256sum -c SHA256SUMS.txt
+          flags=(--draft --verify-tag)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" "${flags[@]}" \
+            --title "Раскладушка $VERSION" \
+            --notes "Установщик — Raskladushka-$VERSION-setup.exe. Суммы SHA-256 — в SHA256SUMS.txt." \
+            "Raskladushka-$VERSION-setup.exe" SHA256SUMS.txt

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Raskladushka.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Raskladushka.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Voice\voice-catalog.json" LogicalName="voice-catalog.json" />
+    <EmbeddedResource Include="..\..\data\src\ru_50k.txt" LogicalName="ru_50k.txt" />
+    <EmbeddedResource Include="..\..\data\src\en_50k.txt" LogicalName="en_50k.txt" />
+  </ItemGroup>
+
+</Project>

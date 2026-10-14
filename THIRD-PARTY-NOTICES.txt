@@ -1,0 +1,183 @@
+﻿Раскладушка — лицензии сторонних компонентов
+============================================
+
+Раскладушка распространяется по лицензии MIT. В неё входят компоненты других
+авторов, а часть файлов программа скачивает при включении голосового ввода.
+Ниже перечислено, что это за компоненты, откуда они взяты и на каких условиях
+их можно использовать. В конце — полные тексты лицензий.
+
+
+Входят в установщик
+-------------------
+
+1. Раскладушка
+   Лицензия MIT, Copyright (c) 2026 Lomer275.
+   https://github.com/Lomer275/raskladushka
+
+2. .NET и Windows Forms
+   Лицензия MIT, Copyright (c) .NET Foundation and Contributors.
+   Программа собрана вместе со средой .NET, отдельно ставить .NET не нужно.
+   Уведомления о компонентах внутри самой .NET:
+   https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT
+
+3. NAudio 2.2.1
+   Лицензия MIT, Copyright 2020 Mark Heath.
+   https://github.com/naudio/NAudio
+
+4. Словари частых слов ru_50k.txt и en_50k.txt
+   Автор — Hermit Dave, https://github.com/hermitdave/FrequencyWords
+   Лицензия CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
+   Списки построены по корпусу OpenSubtitles 2018 (http://www.opensubtitles.org,
+   https://opus.nlpl.eu). Вложены в программу без изменений и предоставляются
+   «как есть», без гарантий (раздел 5 лицензии).
+
+5. Библиотеки Microsoft Visual C++: msvcp140.dll, vcruntime140.dll,
+   vcruntime140_1.dll, vcomp140.dll
+   Распространяемый код Microsoft (Distributable Code) по условиям лицензии
+   Microsoft Visual Studio. Права принадлежат Microsoft Corporation.
+   Распространяются только вместе с программой и нужны голосовому вводу,
+   чтобы не ставить Visual C++ отдельно.
+
+
+Скачиваются при включении голосового ввода
+------------------------------------------
+
+Этих файлов в установщике нет. Их скачивают кнопкой «Скачать» в окне
+голосового ввода: whisper.cpp — с GitHub, модели — с Hugging Face.
+
+6. whisper.cpp
+   Лицензия MIT, Copyright (c) 2023-2026 The ggml authors.
+   https://github.com/ggml-org/whisper.cpp
+
+7. Модели распознавания речи Whisper в формате ggml
+   Лицензия MIT, Copyright (c) 2022 OpenAI.
+   https://github.com/openai/whisper
+   https://huggingface.co/ggerganov/whisper.cpp
+
+8. Библиотеки NVIDIA CUDA (вариант для видеокарты)
+   Входят в сборку whisper.cpp для CUDA. Условия использования — NVIDIA CUDA
+   Toolkit EULA: https://docs.nvidia.com/cuda/eula/
+   Раскладушка эти файлы не распространяет: их скачивают из выпуска whisper.cpp.
+
+
+Тексты лицензий
+===============
+
+
+--- Раскладушка ---
+
+MIT License
+
+Copyright (c) 2026 Lomer275
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+--- .NET и Windows Forms ---
+
+The MIT License (MIT)
+
+Copyright (c) .NET Foundation and Contributors
+
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+--- NAudio ---
+
+Copyright 2020 Mark Heath
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+--- whisper.cpp ---
+
+MIT License
+
+Copyright (c) 2023-2026 The ggml authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+--- Модели Whisper ---
+
+MIT License
+
+Copyright (c) 2022 OpenAI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+--- Словари частых слов ---
+
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+Полный текст: https://creativecommons.org/licenses/by-sa/4.0/legalcode

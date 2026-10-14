@@ -1,0 +1,27 @@
+/* XPM */
+static char *raskladushka_20[] = {
+"20 20 3 1",
+"  c None",
+"g c #1F9D55",
+"w c #FFFFFF",
+"  gggggggggggggggg  ",
+" gggggggggggggggggg ",
+"gggggggggggggggggggg",
+"gggggggggggggggggggg",
+"gggggggggggggggggggg",
+"ggggwwwwgggggggggggg",
+"ggggwwwwgggggggggggg",
+"gggwwwwwwwwwwwwwwggg",
+"gggwwwwwwwwwwwwwwggg",
+"gggwggggwggwggggwggg",
+"ggggwggwggggwggwgggg",
+"gggggwwggggggwwggggg",
+"gggggwwggggggwwggggg",
+"ggggwggwggggwggwgggg",
+"gggwggggwggwggggwggg",
+"gggggggggggggggggggg",
+"gggggggggggggggggggg",
+"gggggggggggggggggggg",
+" gggggggggggggggggg ",
+"  gggggggggggggggg  "
+};
