@@ -1,0 +1,46 @@
+name: macOS
+
+on:
+  push:
+    branches: [mac]
+  pull_request:
+    paths:
+      - 'mac/**'
+      - '.github/workflows/mac.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Версия Swift
+        run: swift --version
+      - name: Тесты ядра
+        run: cd mac && swift test
+      - name: Сборка приложения
+        run: mac/scripts/build-app.sh
+      - name: Обе архитектуры
+        run: |
+          set -euo pipefail
+          archs="$(lipo -archs 'mac/build/Раскладушка.app/Contents/MacOS/Raskladushka')"
+          echo "$archs"
+          [[ " $archs " == *" arm64 "* ]]
+          [[ " $archs " == *" x86_64 "* ]]
+      - name: Проверка Info.plist
+        run: plutil -lint 'mac/build/Раскладушка.app/Contents/Info.plist'
+      - name: Проверка подписи
+        run: codesign --verify --strict --deep 'mac/build/Раскладушка.app'
+      - name: Архив приложения
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Raskladushka-mac
+          path: mac/build/Raskladushka-mac-*.zip
+          if-no-files-found: error
+          retention-days: 14
