@@ -21,6 +21,27 @@ public sealed class AppHost : IDisposable
     private readonly WasapiRecorder _recorder;
     private readonly IndicatorForm _indicator;
     public WhisperServerHost Whisper { get; }
+    public RemoteWhisperClient RemoteWhisper { get; }
+    public ISecretProtector SecretProtector { get; } = new DpapiSecretProtector();
+    private readonly AsyncLocal<VoiceServerSettings?> _checkServerSettings = new();
+
+    public async Task<RemoteResult> CheckVoiceServerAsync(VoiceServerSettings settings, AudioClip clip, CancellationToken ct)
+    {
+        // A check uses unsaved fields without exposing them to concurrent dictation.
+        _checkServerSettings.Value = settings;
+        try
+        {
+            return await RemoteWhisper.TranscribeAsync(clip, Settings.Dictation.Language, Settings.Dictation.Prompt,
+                VoiceServerRoute.TimeoutFor(clip.Duration), ct).ConfigureAwait(false);
+        }
+        finally { _checkServerSettings.Value = null; }
+    }
+
+    public void SaveVoiceServer(VoiceServerSettings settings)
+    {
+        if (_settingsWatcher is null) throw new InvalidOperationException("Settings watcher unavailable.");
+        _settingsWatcher.Update(current => current with { VoiceServer = settings });
+    }
     public DictationWorker Dictation { get; }
     public ClipboardInserter TextInserter { get; }
     public DictationUi DictationUi { get; }
@@ -109,12 +130,17 @@ public sealed class AppHost : IDisposable
             message => Log.Info($"Selection: {message} [app={ProcessName()}]"));
         _recorder = new WasapiRecorder(() => Settings.Dictation.Microphone);
         Whisper = new WhisperServerHost(() => Settings.Whisper, () => Settings.Dictation.Language);
+        RemoteWhisper = new RemoteWhisperClient(new SocketsHttpHandler
+        {
+            UseProxy = false, ConnectTimeout = TimeSpan.FromSeconds(3),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+        }, () => _checkServerSettings.Value ?? Settings.VoiceServer, SecretProtector, TimeProvider.System);
         _indicator = new IndicatorForm();
         DictationUi = new DictationUi(_indicator, Notify, () => MemoryTrimmer!.Touch());
         MemoryTrimmer = new MemoryTrimmer(() => SelfTestRunning || DictationUi.IsBusy, Log);
         TextInserter = new ClipboardInserter(StaWorker, Clipboard, _output);
         Dictation = new DictationWorker(_recorder, Whisper, TextInserter, DictationUi,
-            () => Settings.Dictation, message => Log.Info($"Dictation: {message} [app={ProcessName()}]"));
+            () => Settings.Dictation, message => Log.Info($"Dictation: {message} [app={ProcessName()}]"), remote: RemoteWhisper);
         static int Metric(int index)
         {
             var value = NativeMethods.GetSystemMetrics(index);
@@ -134,7 +160,7 @@ public sealed class AppHost : IDisposable
             HotkeyNames.TryGetVk(Settings.Dictation.Hotkey, out var vk);
             return vk;
         }, () => HotkeyNames.IsAltTap(Settings.Layout.FixHotkey), hint,
-            () => VoiceSetupOpen ? VoiceKeyState.Busy : VoiceInstalled ? VoiceKeyState.Ready : VoiceKeyState.NotInstalled);
+            () => VoiceSetupOpen ? VoiceKeyState.Busy : (VoiceInstalled || RemoteWhisper.IsConfigured) ? VoiceKeyState.Ready : VoiceKeyState.NotInstalled);
         Router.VoiceMissing += OnVoiceMissing;
         Router.TapBlocked += OnTapBlocked;
         _hooks.Diagnostic = message => Log.Info($"{message}; app={ProcessName()}.");
@@ -366,6 +392,12 @@ public sealed class AppHost : IDisposable
 
     private void Notify(string message, NotifyAction action = NotifyAction.None)
     {
+        if (message == "Whisper не запустился. Подробности в журнале." &&
+            RemoteWhisper.IsConfigured && !VoiceInstalled)
+        {
+            message = "Голосовой ввод ещё не скачан. Нажмите, чтобы скачать.";
+            action = NotifyAction.OpenVoiceSetup;
+        }
         if (Volatile.Read(ref _disposed) == 0)
             try { Notification?.Invoke(message, action); }
             catch (Exception error) { Log.Error("Notification failed", error); }
@@ -395,6 +427,7 @@ public sealed class AppHost : IDisposable
         Release(MemoryTrimmer.Dispose);
         Release(_hooks.Dispose);
         Release(Dictation.Dispose);
+        Release(RemoteWhisper.Dispose);
         Release(Whisper.Dispose);
         Release(_recorder.Dispose);
         Release(_indicator.Dispose);

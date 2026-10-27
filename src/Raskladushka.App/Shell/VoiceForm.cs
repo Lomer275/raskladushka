@@ -13,6 +13,12 @@ public sealed class VoiceForm : Form
     private readonly VoiceCatalog _catalog = VoiceCatalog.LoadEmbedded();
     private readonly TableLayoutPanel _layout = new()
     { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill, ColumnCount = 1, Padding = new Padding(12) };
+    private readonly TextBox _serverAddress = new() { Width = 600 };
+    private readonly TextBox _serverKey = new() { Width = 600, UseSystemPasswordChar = true };
+    private readonly Label _serverStatus = new() { AutoSize = true, MaximumSize = new Size(640, 0) };
+    private readonly Button _checkServer = new() { AutoSize = true, Text = "Проверить" };
+    private readonly Button _saveServer = new() { AutoSize = true, Text = "Сохранить" };
+    private Task _serverWork = Task.CompletedTask;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _operation;
     private Task _work = Task.CompletedTask;
@@ -36,12 +42,105 @@ public sealed class VoiceForm : Form
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         StartPosition = FormStartPosition.CenterScreen;
-        Controls.Add(_layout);
+        var sections = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 1 };
+        var server = new GroupBox { Text = "Сервер распознавания", AutoSize = true, Dock = DockStyle.Top };
+        var fields = new TableLayoutPanel
+        { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 1, Padding = new Padding(12, 20, 12, 12) };
+        fields.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(640, 0),
+            Text = "Свой сервер whisper.cpp. Пока адрес пустой, голос распознаётся на этом компьютере." });
+        fields.Controls.Add(new Label { AutoSize = true, Text = "Адрес" });
+        fields.Controls.Add(_serverAddress);
+        fields.Controls.Add(new Label { AutoSize = true, Text = "Ключ" });
+        fields.Controls.Add(_serverKey);
+        var buttons = new FlowLayoutPanel { AutoSize = true };
+        buttons.Controls.Add(_checkServer);
+        buttons.Controls.Add(_saveServer);
+        fields.Controls.Add(buttons);
+        fields.Controls.Add(_serverStatus);
+        server.Controls.Add(fields);
+        sections.Controls.Add(server);
+        sections.Controls.Add(_layout);
+        Controls.Add(sections);
+        _serverAddress.Text = _settings.VoiceServer.Url;
+        _serverKey.Text = _host.SecretProtector.Unprotect(_settings.VoiceServer.KeyProtected) ?? "";
+        _checkServer.Click += (_, _) => BeginServerCheck();
+        _saveServer.Click += (_, _) => SaveServer();
+    }
+
+    private VoiceServerSettings? ServerFields()
+    {
+        var address = _serverAddress.Text.Trim();
+        if (address.Length > 0 && !VoiceServerAddress.TryParse(address, out _))
+        {
+            _serverStatus.Text = "Адрес должен начинаться с http:// или https://.";
+            return null;
+        }
+        return new VoiceServerSettings
+        {
+            Url = address,
+            KeyProtected = _serverKey.Text.Length == 0 ? "" : _host.SecretProtector.Protect(_serverKey.Text)
+        };
+    }
+
+    private void SaveServer()
+    {
+        try
+        {
+            var settings = ServerFields();
+            if (settings is null) return;
+            _host.SaveVoiceServer(settings);
+            _host.RefreshVoiceInstalled();
+            if (settings.Url.Length > 0 && !_host.VoiceInstalled)
+            {
+                _serverStatus.Text = "Сохранено. Скачиваю голос для этого компьютера — он нужен, когда сервер недоступен.";
+                BeginInstall(_selected, false);
+            }
+            else _serverStatus.Text = "Сохранено.";
+        }
+        catch (Exception) { _serverStatus.Text = "Не удалось сохранить настройки сервера."; }
+    }
+
+    private void BeginServerCheck()
+    {
+        try
+        {
+            var settings = ServerFields();
+            if (settings is null) return;
+            if (settings.Url.Length == 0)
+            {
+                _serverStatus.Text = "Адрес должен начинаться с http:// или https://.";
+                return;
+            }
+            _checkServer.Enabled = false;
+            _serverStatus.Text = "";
+            _serverWork = Task.Run(async () =>
+            {
+                try
+                {
+                    var clip = VoiceVerifier.LoadSelftestClip();
+                    var result = await _host.CheckVoiceServerAsync(settings, clip, _lifetime.Token).ConfigureAwait(false);
+                    var text = result.Outcome switch
+                    {
+                        RemoteOutcome.Ok => string.Format(Russian, "Сервер ответил за {0:0.0} с: «{1}»", result.Elapsed.TotalSeconds, result.Text),
+                        RemoteOutcome.KeyRejected => "Ключ не подходит.",
+                        RemoteOutcome.Unreachable or RemoteOutcome.Timeout => "Сервер недоступен.",
+                        RemoteOutcome.Busy => "Сервер занят, попробуйте позже.",
+                        _ => result.Status is int code ? $"Сервер ответил ошибкой {code}." : "Сервер ответил непонятно."
+                    };
+                    Post(() => _serverStatus.Text = text);
+                }
+                catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+                catch (Exception) { Post(() => _serverStatus.Text = "Сервер ответил непонятно."); }
+                finally { Post(() => _checkServer.Enabled = true); }
+            });
+        }
+        catch (Exception) { _serverStatus.Text = "Не удалось подготовить ключ сервера."; }
     }
 
     protected override void OnShown(EventArgs e)
     {
         _host.VoiceSetupOpen = true;
+        _saveServer.Enabled = false;
         _suspend = _host.Dictation.SuspendAsync();
         _work = Task.Run(async () =>
         {
@@ -85,6 +184,7 @@ public sealed class VoiceForm : Form
     private void ShowInitial(bool manual, bool installed, WhisperMode mode, bool offerModel, long free)
     {
         Clear();
+        _saveServer.Enabled = true;
         if (manual) Label("Голос настроен вручную (раздел whisper в настройках), скачивание отключено.");
         else if (installed) Label(mode == WhisperMode.Gpu ? "Установлен: для видеокарты" : "Установлен: для процессора");
         if (installed)
@@ -229,6 +329,7 @@ public sealed class VoiceForm : Form
 
     private void StartOperation(Func<CancellationToken, Task> action, Action retry, string cancelledText, string retryText)
     {
+        _saveServer.Enabled = false;
         _operation?.Dispose();
         _operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var ct = _operation.Token;
@@ -246,6 +347,7 @@ public sealed class VoiceForm : Form
                 });
             }
             catch (Exception error) { Unexpected(error); }
+            finally { Post(() => _saveServer.Enabled = true); }
         });
     }
 
@@ -288,7 +390,7 @@ public sealed class VoiceForm : Form
             if (_closing) return;
             _closing = true;
             _lifetime.Cancel();
-            await _work;
+            await Task.WhenAll(_work, _serverWork);
             _allowClose = true;
             Close();
             return;
@@ -313,7 +415,7 @@ public sealed class VoiceForm : Form
         catch (Exception error) { _host.Log.Error("Voice resume failed", error); }
         try { await Task.Run(_host.RefreshVoiceInstalled).ConfigureAwait(false); }
         catch (Exception error) { _host.Log.Error("Voice installed refresh failed", error); }
-        await _work.ConfigureAwait(false);
+        await Task.WhenAll(_work, _serverWork).ConfigureAwait(false);
         _operation?.Dispose();
         _lifetime.Dispose();
     }

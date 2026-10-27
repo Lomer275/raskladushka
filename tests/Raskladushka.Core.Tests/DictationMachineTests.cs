@@ -580,6 +580,241 @@ public sealed class DictationMachineTests
         f.AssertIdle();
     }
 
+    [Fact(DisplayName = "М1 Unconfigured server preserves local route")]
+    public async Task UnconfiguredServerPreservesLocalRoute()
+    {
+        var f = new RemoteFixture();
+        f.Remote.IsConfigured = false;
+        f.Machine.OnHotkeyDown();
+        Assert.Equal([WhisperMode.Gpu], f.Host.Starts);
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Equal(0, f.Remote.Calls);
+        Assert.Equal(["привет "], f.Inserter.Texts);
+        Assert.DoesNotContain(f.Log, line => line.StartsWith("Voice route:"));
+        f.AssertIdle();
+    }
+
+    [Fact(DisplayName = "М2 Server success forwards clip and cleans text")]
+    public async Task ServerSuccessForwardsClipAndCleansText()
+    {
+        var f = new RemoteFixture();
+        f.Remote.Result = new(RemoteOutcome.Ok, "первая строка\nВторая строка", 200, 61234, TimeSpan.FromSeconds(0.812));
+        f.Machine.OnHotkeyDown();
+        Assert.Empty(f.Host.Starts);
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Empty(f.Host.Starts);
+        Assert.Equal(1, f.Remote.Calls);
+        Assert.Same(f.Recorder.Clip, f.Remote.Clip);
+        Assert.Equal(("en", "terms"), f.Remote.Parameters);
+        Assert.Equal(VoiceServerRoute.TimeoutFor(f.Recorder.Clip.Duration), f.Remote.Timeout);
+        Assert.Equal(["первая строка. Вторая строка "], f.Inserter.Texts);
+        Assert.Equal("Voice route: server; reason=ok; audio=2.0 s; upload=61234 B; status=200; elapsed=0.812 s.",
+            Assert.Single(f.Log, line => line.StartsWith("Voice route:")));
+        Assert.Contains(f.Log, line => line.StartsWith("Transcription duration:"));
+        f.AssertIdle();
+    }
+
+    [Theory(DisplayName = "М3 Server failure uses same local clip")]
+    [InlineData(RemoteOutcome.Unreachable, "unreachable")]
+    [InlineData(RemoteOutcome.Busy, "busy")]
+    [InlineData(RemoteOutcome.Timeout, "timeout")]
+    [InlineData(RemoteOutcome.Failed, "failed")]
+    [InlineData(RemoteOutcome.KeyRejected, "key")]
+    public async Task ServerFailureUsesSameLocalClip(RemoteOutcome outcome, string reason)
+    {
+        var f = new RemoteFixture();
+        f.Remote.Result = new(outcome, null, 503, 42, TimeSpan.FromSeconds(1));
+        await f.Dictate();
+        Assert.Equal([outcome == RemoteOutcome.KeyRejected ? VoiceServerRoute.KeyRejectedNotice : VoiceServerRoute.ServerUnavailableNotice], f.Ui.Notices);
+        Assert.Equal([WhisperMode.Gpu], f.Host.Starts);
+        Assert.Same(f.Recorder.Clip, Assert.Single(f.Host.Clips));
+        Assert.Equal(["привет "], f.Inserter.Texts);
+        Assert.Equal($"Voice route: local; reason={reason}; audio=2.0 s; upload=42 B; status=503; elapsed=1.000 s.",
+            Assert.Single(f.Log, line => line.StartsWith("Voice route:")));
+        f.AssertIdle();
+    }
+
+    [Fact(DisplayName = "М4 Key rejection falls back through GPU to CPU")]
+    public async Task KeyRejectionFallsBackThroughGpuToCpu()
+    {
+        var f = new RemoteFixture();
+        f.Remote.Result = new(RemoteOutcome.KeyRejected, null, 401, 0, TimeSpan.Zero);
+        f.Host.FailGpuStart = true;
+        await f.Dictate();
+        Assert.Equal([VoiceServerRoute.KeyRejectedNotice, CpuNotice], f.Ui.Notices);
+        Assert.Equal([WhisperMode.Gpu, WhisperMode.Cpu], f.Host.Starts);
+        Assert.Equal(["привет "], f.Inserter.Texts);
+        f.AssertIdle();
+    }
+
+    [Fact(DisplayName = "М5 Cooldown skips server until five minutes")]
+    public async Task CooldownSkipsServerUntilFiveMinutes()
+    {
+        var f = new RemoteFixture();
+        f.Remote.Result = new(RemoteOutcome.Timeout, null, null, 0, TimeSpan.Zero);
+        await f.Dictate();
+        f.Host.IsRunning = false;
+        f.Time.Advance(TimeSpan.FromMinutes(1));
+        f.Machine.OnHotkeyDown();
+        Assert.Equal(2, f.Host.Starts.Count);
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Equal(1, f.Remote.Calls);
+        Assert.Single(f.Ui.Notices);
+        Assert.Contains("Voice route: local; reason=cooldown; audio=2.0 s; upload=-; status=-; elapsed=-.", f.Log);
+        f.Time.Advance(TimeSpan.FromMinutes(4));
+        f.Remote.Result = new(RemoteOutcome.Ok, "ответ", 200, 1, TimeSpan.Zero);
+        await f.Dictate();
+        Assert.Equal(2, f.Remote.Calls);
+        Assert.Equal(2, f.Host.Starts.Count);
+        Assert.Equal(3, f.Inserter.Texts.Count);
+        Assert.Equal(3, f.Log.Count(line => line.StartsWith("Voice route:")));
+        f.AssertIdle();
+    }
+
+    [Theory(DisplayName = "М6 Suspension cancels server and drops result")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SuspensionCancelsServerAndDropsResult(bool resume)
+    {
+        var f = new RemoteFixture();
+        f.Remote.Gate = new();
+        f.Machine.OnHotkeyDown();
+        var release = f.Machine.OnHotkeyUpAsync();
+        await f.Remote.Entered.Task;
+        Assert.Equal(IndicatorState.Transcribing, f.Ui.Indicators.Last());
+        f.Machine.Suspend();
+        Assert.True(f.Remote.Token.IsCancellationRequested);
+        if (resume) f.Machine.Resume();
+        await release;
+        f.Remote.Gate.SetResult(f.Remote.Result);
+        Assert.Empty(f.Host.Starts);
+        Assert.Empty(f.Inserter.Texts);
+        Assert.Empty(f.Ui.Notices);
+        f.AssertIdle();
+    }
+
+    [Fact(DisplayName = "М7 Cancellation and repeated hotkey do not send another request")]
+    public async Task CancellationAndRepeatedHotkeyDoNotSendAnotherRequest()
+    {
+        var f = new RemoteFixture();
+        f.Machine.OnHotkeyDown();
+        f.Machine.OnOtherKeyWhileHeld();
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Equal(0, f.Remote.Calls);
+        f.AssertIdle();
+        f.Remote.Gate = new();
+        f.Machine.OnHotkeyDown();
+        var release = f.Machine.OnHotkeyUpAsync();
+        await f.Remote.Entered.Task;
+        f.Machine.OnHotkeyDown();
+        f.Machine.OnOtherKeyWhileHeld();
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Equal(1, f.Remote.Calls);
+        Assert.Equal(2, f.Recorder.Starts);
+        f.Remote.Gate.SetResult(f.Remote.Result);
+        await release;
+        Assert.Single(f.Inserter.Texts);
+        f.AssertIdle();
+    }
+
+    [Fact(DisplayName = "М8 Missing local voice after server failure returns idle")]
+    public async Task MissingLocalVoiceAfterServerFailureReturnsIdle()
+    {
+        var f = new RemoteFixture();
+        f.Remote.Result = new(RemoteOutcome.Unreachable, null, null, 0, TimeSpan.Zero);
+        f.Host.HasGpuBuild = false;
+        f.Host.FailCpuStart = true;
+        await f.Dictate();
+        Assert.Equal([VoiceServerRoute.ServerUnavailableNotice, StartNotice], f.Ui.Notices);
+        Assert.Empty(f.Inserter.Texts);
+        f.AssertIdle();
+    }
+
+    [Theory(DisplayName = "М9 Private data stays out of diagnostics")]
+    [InlineData(RemoteOutcome.Ok, false)]
+    [InlineData(RemoteOutcome.Failed, false)]
+    [InlineData(RemoteOutcome.Failed, true)]
+    public async Task RemotePrivateDataStaysOutOfDiagnostics(RemoteOutcome outcome, bool throws)
+    {
+        var f = new RemoteFixture();
+        string[] secrets = ["секрет-текст-123", "http://sentinel.invalid/x", "test-key-sentinel"];
+        f.Remote.Result = new(outcome, secrets[0], 200, 5, TimeSpan.Zero);
+        if (throws) f.Remote.Error = new WhisperStartException(string.Join(" ", secrets));
+        var error = await Record.ExceptionAsync(f.Dictate);
+        Assert.Null(error);
+        Assert.All(f.Log.Concat(f.Ui.Notices), line =>
+        {
+            foreach (var secret in secrets) Assert.DoesNotContain(secret, line);
+        });
+        Assert.Equal([outcome == RemoteOutcome.Ok ? secrets[0] + " " : "привет "], f.Inserter.Texts);
+        f.AssertIdle();
+    }
+
+    [Fact]
+    public async Task ServerRouteIsFixedAtKeyDown()
+    {
+        var f = new RemoteFixture();
+        f.Machine.OnHotkeyDown();
+        f.Remote.IsConfigured = false;
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Equal(1, f.Remote.Calls);
+        Assert.Empty(f.Host.Starts);
+        f.Machine.OnHotkeyDown();
+        f.Remote.IsConfigured = true;
+        await f.Machine.OnHotkeyUpAsync();
+        Assert.Equal(1, f.Remote.Calls);
+        Assert.Single(f.Host.Starts);
+    }
+
+    private sealed class RemoteFixture
+    {
+        public FakeTimeProvider Time { get; } = new();
+        public Recorder Recorder { get; } = new();
+        public Host Host { get; } = new();
+        public Inserter Inserter { get; } = new();
+        public Ui Ui { get; } = new();
+        public Remote Remote { get; } = new();
+        public List<string> Log { get; } = [];
+        public DictationMachine Machine { get; }
+        public RemoteFixture() => Machine = new(Recorder, Host, Inserter, Ui, Time,
+            () => new() { Language = "en", Prompt = "terms" }, Log.Add, Remote);
+        public async Task Dictate()
+        {
+            Machine.OnHotkeyDown();
+            await Machine.OnHotkeyUpAsync();
+        }
+        public void AssertIdle()
+        {
+            Assert.Equal(DictationState.Idle, Machine.State);
+            Assert.Equal(IndicatorState.Hidden, Ui.Indicators.Last());
+        }
+    }
+
+    private sealed class Remote : IRemoteTranscriber
+    {
+        public bool IsConfigured { get; set; } = true;
+        public int Calls { get; private set; }
+        public AudioClip? Clip { get; private set; }
+        public (string, string) Parameters { get; private set; }
+        public TimeSpan Timeout { get; private set; }
+        public CancellationToken Token { get; private set; }
+        public RemoteResult Result { get; set; } = new(RemoteOutcome.Ok, "ответ", 200, 5, TimeSpan.Zero);
+        public Exception? Error { get; set; }
+        public TaskCompletionSource<RemoteResult>? Gate { get; set; }
+        public TaskCompletionSource Entered { get; } = new();
+        public Task<RemoteResult> TranscribeAsync(AudioClip clip, string language, string prompt, TimeSpan timeout, CancellationToken ct)
+        {
+            Calls++;
+            Clip = clip;
+            Parameters = (language, prompt);
+            Timeout = timeout;
+            Token = ct;
+            Entered.TrySetResult();
+            if (Error is not null) throw Error;
+            return Gate?.Task ?? Task.FromResult(Result);
+        }
+    }
+
     private sealed class Fixture
     {
         public FakeTimeProvider Time { get; } = new();

@@ -6,6 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="Concentus.OggFile" Version="1.0.7" />
     <InternalsVisibleTo Include="Raskladushka.Core.Tests" />
   </ItemGroup>
 

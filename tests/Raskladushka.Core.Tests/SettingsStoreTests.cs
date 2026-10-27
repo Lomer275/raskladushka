@@ -255,6 +255,26 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("Неверная структура настроек.", result.Error);
     }
 
+    [Fact]
+    public void N1_VoiceServerDefaultsAndRoundTrip()
+    {
+        var old = Load("{}");
+        Assert.Null(old.Error);
+        Assert.Equal("", old.Settings.VoiceServer.Url);
+        Assert.Equal("", old.Settings.VoiceServer.KeyProtected);
+        var settings = new Settings
+        {
+            VoiceServer = new() { Url = "https://example.test/inference", KeyProtected = "test-key-protected" }
+        };
+        var json = SettingsStore.ToJson(settings);
+        Assert.Contains("\"voiceServer\"", json);
+        Assert.Contains("\"url\"", json);
+        Assert.Contains("\"keyProtected\"", json);
+        var loaded = Load(json);
+        Assert.Null(loaded.Error);
+        Assert.Equal(settings.VoiceServer, loaded.Settings.VoiceServer);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);

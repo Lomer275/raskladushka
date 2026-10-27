@@ -15,11 +15,11 @@ public sealed class DictationWorker : IDisposable
     private int _disposed;
 
     public DictationWorker(IAudioRecorder recorder, IWhisperHost whisper, ITextInserter inserter,
-        IDictationUi ui, Func<DictationSettings> settings, Action<string> log, TimeProvider? time = null)
+        IDictationUi ui, Func<DictationSettings> settings, Action<string> log, TimeProvider? time = null, IRemoteTranscriber? remote = null)
     {
         _whisper = whisper;
         _time = new WorkerTimeProvider(this, time ?? TimeProvider.System);
-        _machine = new DictationMachine(recorder, whisper, inserter, ui, _time, settings, log);
+        _machine = new DictationMachine(recorder, whisper, inserter, ui, _time, settings, log, remote);
         _thread = new Thread(() =>
         {
             foreach (var action in _queue.GetConsumingEnumerable()) action();

@@ -39,22 +39,32 @@
    чтобы не ставить Visual C++ отдельно.
 
 
+6. Concentus 2.2.2
+   Лицензия BSD, Copyright (c) by various holding parties.
+   Полный список правообладателей и условия — ниже.
+   https://github.com/lostromb/concentus
+
+7. Concentus.OggFile 1.0.7
+   Лицензия MIT, Copyright © Logan Stromberg, Andrew Ward.
+   https://github.com/lostromb/concentus.oggfile
+
+
 Скачиваются при включении голосового ввода
 ------------------------------------------
 
 Этих файлов в установщике нет. Их скачивают кнопкой «Скачать» в окне
 голосового ввода: whisper.cpp — с GitHub, модели — с Hugging Face.
 
-6. whisper.cpp
+8. whisper.cpp
    Лицензия MIT, Copyright (c) 2023-2026 The ggml authors.
    https://github.com/ggml-org/whisper.cpp
 
-7. Модели распознавания речи Whisper в формате ggml
+9. Модели распознавания речи Whisper в формате ggml
    Лицензия MIT, Copyright (c) 2022 OpenAI.
    https://github.com/openai/whisper
    https://huggingface.co/ggerganov/whisper.cpp
 
-8. Библиотеки NVIDIA CUDA (вариант для видеокарты)
+10. Библиотеки NVIDIA CUDA (вариант для видеокарты)
    Входят в сборку whisper.cpp для CUDA. Условия использования — NVIDIA CUDA
    Toolkit EULA: https://docs.nvidia.com/cuda/eula/
    Раскладушка эти файлы не распространяет: их скачивают из выпуска whisper.cpp.
@@ -181,3 +191,69 @@ SOFTWARE.
 
 Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
 Полный текст: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+
+--- Concentus 2.2.2 ---
+
+Copyright (c) by various holding parties, including (but not limited to): 
+Skype Limited, Xiph.Org Foundation, CSIRO, Microsoft Corporation,
+Jean-Marc Valin, Gregory Maxwell, Mark Borgerding, Timothy B. Terriberry,
+Logan Stromberg. All rights are reserved by their respective holders.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of Internet Society, IETF or IETF Trust, nor the
+   names of specific contributors, may be used to endorse or promote
+   products derived from this software without specific prior written
+   permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+This repository and its redistributable packages contain independently compiled
+versions of the Opus C reference library, which is maintained by Xiph.org and the
+Opus open-source contributors. The source code for these libraries is freely available
+at https://gitlab.xiph.org/xiph/opus/-/tags/v1.5.2, and all binaries are being
+redistributed to you under the same terms of the general Opus license dictated above.
+
+
+--- Concentus.OggFile 1.0.7 ---
+
+MIT License
+
+Copyright © Logan Stromberg, Andrew Ward
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

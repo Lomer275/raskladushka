@@ -43,6 +43,12 @@ public sealed record UpdateSettings
     public bool Notify { get; init; } = true;
 }
 
+public sealed record VoiceServerSettings
+{
+    public string Url { get; init; } = "";
+    public string KeyProtected { get; init; } = "";
+}
+
 public sealed record Settings
 {
     public DictationSettings Dictation { get; init; } = new();
@@ -52,6 +58,7 @@ public sealed record Settings
     public WhisperSettings Whisper { get; init; } = new();
     public DiagnosticsSettings Diagnostics { get; init; } = new();
     public UpdateSettings Updates { get; init; } = new();
+    public VoiceServerSettings VoiceServer { get; init; } = new();
 }
 
 public sealed record LoadResult(Settings Settings, string? Error);
